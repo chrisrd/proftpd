@@ -296,12 +296,21 @@ static conn_t *init_conn(pool *p, int fd, pr_netaddr_t *bind_addr,
         strerror(errno));
     }
 
+{
+    int set = 1;
+    if (main_server != NULL && main_server->tcp_keepalive != NULL) {
+        set = main_server->tcp_keepalive->keepalive_enabled == TRUE;
+    }
+
     /* Allow socket keep-alive messages. */
-    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *) &one,
-        sizeof(one)) < 0) {
+    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *) &set,
+        sizeof(set)) < 0) {
       pr_log_pri(PR_LOG_NOTICE, "error setting SO_KEEPALIVE: %s",
         strerror(errno));
     }
+    pr_trace_msg(trace_channel, 15, "%s SO_KEEPALIVE on socket fd %d",
+    	set ? "enabled" : "disabled", fd);
+}
 
     memset(&na, 0, sizeof(na));
     if (pr_netaddr_set_family(&na, addr_family) < 0) {
@@ -822,7 +831,14 @@ int pr_inet_set_socket_opts(pool *p, conn_t *c, int rcvbuf, int sndbuf,
        * set successfully.
        */
       pr_trace_msg(trace_channel, 15,
-        "enabled SO_KEEPALIVE on socket fd %d", c->listen_fd);
+        "%s SO_KEEPALIVE on socket fd %d (tcp_keepalive=%s, keepalive=%d, idle=%d, count=%d)",
+	keepalive ? "enabled" : "disabled",
+	c->listen_fd,
+	tcp_keepalive == NULL ? "NULL" : "set",
+	keepalive,
+	tcp_keepalive == NULL ? -99999 : tcp_keepalive->keepalive_idle,
+	tcp_keepalive == NULL ? -99999 : tcp_keepalive->keepalive_count
+      );
 
       if (tcp_keepalive != NULL) {
         int val = 0;
